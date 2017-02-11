@@ -13,3 +13,7 @@
 
 # rbenv
 .ruby-version
+
+# jbundler
+/.jbundler/
+/Jarfile.lock
