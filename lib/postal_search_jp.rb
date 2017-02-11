@@ -13,6 +13,9 @@ FILE_URL_ROMAN_ZIP = 'http://www.post.japanpost.jp/zipcode/dl/roman/ken_all_rome
 
 module PostalSearchJp
 
+  class JpPostalCode < Struct.new(:postal_code, :prefecture, :city, :street, :prefecture_kana, :city_kana, :street_kana)
+  end
+
   def self.configure(options)
     @configs = {}
     @configs.merge!(options)
@@ -23,8 +26,29 @@ module PostalSearchJp
     define_athena_schema
   end
 
+  def self.search_by_address(keyword)
+    keyword = quote_string(keyword)
+    select(where: "prefecture LIKE '%#{keyword}%' OR city LIKE '%#{keyword}%' OR street LIKE '%#{keyword}%'")
+  end
+
+  def self.find_by_postal_code(postal_code)
+    if postal_code !~ /^[0-9]{7}$/
+      puts 'postal_code must be 7-digits without - (hyphen).' if debug?
+      return nil
+    end
+    postal_code = quote_string(postal_code)
+
+    records = select(where: "postal_code = '#{postal_code}'")
+    return nil if records.empty?
+    records.first
+  end
+
   def self.configs
     @configs ||= {}
+  end
+
+  def self.debug?
+    configs[:debug] || false
   end
 
   def self.aws_credential_configs
@@ -151,6 +175,39 @@ module PostalSearchJp
   ensure
     statement.close if statement
     connection.close if connection
+  end
+
+  def self.select(where:, limit: nil)
+    connection = new_athena_connection
+    statement = connection.create_statement
+
+    query = <<-QUERY
+      SELECT * FROM #{athena_db_name}.#{athena_table_name}
+      WHERE #{where}
+    QUERY
+    query = "#{query} LIMIT #{limit}" unless limit.nil?
+    rs = statement.execute_query(query)
+
+    records = []
+    while (rs.next) do
+      record = JpPostalCode.new
+      record.postal_code     = rs.get_string('postal_code')
+      record.prefecture      = rs.get_string('prefecture')
+      record.city            = rs.get_string('city')
+      record.street          = rs.get_string('street')
+      record.prefecture_kana = rs.get_string('prefecture_kana')
+      record.city_kana       = rs.get_string('city_kana')
+      record.street_kana     = rs.get_string('street_kana')
+      records << record
+    end
+    return records
+  ensure
+    statement.close if statement
+    connection.close if connection
+  end
+
+  def self.quote_string(s)
+    s.gsub(/\\/, '\&\&').gsub(/'/, "''")
   end
 
 end
