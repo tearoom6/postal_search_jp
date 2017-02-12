@@ -136,9 +136,7 @@ module PostalSearchJp
     end
 
     # Upload to S3.
-    result = destination_object.upload_file(converted_file, {
-      acl: 'public-read',
-    })
+    result = destination_object.upload_file(converted_file, {})
     puts 'Data file has been imported.'
   ensure
     FileUtils.rm_rf(TMP_DIRECTORY) if File.exists?(TMP_DIRECTORY)
